@@ -1,0 +1,18 @@
+{
+  "example_only": true,
+  "site": "https://example.com",
+  "business_outcome": "Qualified trial signups from relevant visitors",
+  "audiences": ["Specify the actual audience"],
+  "markets": [{"language": "en", "region": "Specify or global"}],
+  "canonical_origin": "https://example.com",
+  "url_policy": {"trailing_slash": "Read from actual project", "case": "Read from actual project"},
+  "page_classes": [
+    {"type": "product", "pattern": "/products/{slug}", "index_intent": "index", "fact_owner": "Actual CMS or source", "representative_urls": []},
+    {"type": "account", "pattern": "/account/*", "index_intent": "private", "fact_owner": "Application", "representative_urls": []}
+  ],
+  "crawler_policy": {"search": "Record owner preference", "training": "Record separately", "user_fetch": "Verify provider behavior", "google_search_ai_control": "unverified"},
+  "deployment": {"repository": null, "production": null, "preview": null, "release_evidence": null},
+  "available_evidence": {"search_console": false, "bing_webmaster": false, "analytics": false, "verified_bot_logs": false},
+  "scope": {"audit": true, "implement": "Use actual request", "publish": "Use existing authorization", "monitor": "Use actual request"},
+  "coverage": {"known_urls": null, "checked_urls": null, "classes_checked": [], "missing": []}
+}

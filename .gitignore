@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.coverage
+htmlcov/
+.pytest_cache/
+artifacts/
+evidence/
+captures/
+research/
+*.log
+*.zip

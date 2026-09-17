@@ -1,0 +1,6 @@
+interface:
+  display_name: "Jaryn Website SEO/GEO"
+  short_description: "Evidence-based website SEO, AI search, and iteration"
+  default_prompt: "使用 $jaryn-website-seogeo-skill 调研并迭代当前网站，落实高价值 SEO/GEO 改进，验证生产表现并说明效果测量方法。"
+policy:
+  allow_implicit_invocation: true

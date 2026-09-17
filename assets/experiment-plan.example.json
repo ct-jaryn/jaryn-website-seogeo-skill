@@ -1,0 +1,19 @@
+{
+  "example_only": true,
+  "experiment_id": "replace-with-real-id",
+  "hypothesis": "State an evidence-backed hypothesis, not a promised uplift",
+  "baseline_evidence": [],
+  "page_class": "comparison",
+  "treatment_urls": [],
+  "comparison_urls": [],
+  "change": "Specify one coherent change",
+  "primary_metric": {"name": "Qualified conversions", "definition": "Define denominator and attribution"},
+  "guardrails": ["Factual accuracy", "Core task completion", "Organic conversions", "Performance"],
+  "panel_id": "versioned-if-ai-measured",
+  "observation_window": {"start": null, "end": null, "timezone": "UTC", "rationale": "Choose for volume and expected lag"},
+  "known_confounders": [],
+  "success_criteria": "Set before observing results",
+  "rollback_trigger": "Concrete harm threshold",
+  "release_evidence": null,
+  "result": "not-run"
+}
