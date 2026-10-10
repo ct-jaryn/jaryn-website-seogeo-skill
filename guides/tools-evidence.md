@@ -25,6 +25,8 @@ python3 scripts/capture_page.py \
 - `response-body.bin`：受体积上限约束的响应正文字节（HTTP 库已处理 chunked 等传输分帧，不是原始网络报文）。hash 只覆盖已保存字节；截断不是完整网页。`truncated` 表示采集体积上限；`transfer_incomplete` 为 true 表示短传输/读取失败，false 表示按当前 framing 完整读至 EOF，null 表示因上限或不可信 framing 无法判断。冲突的 Content-Length/Transfer-Encoding 会显式记录，不作为完整 HTML 使用。
 - `page.json`：当响应可按 HTML 解析时生成。记录非 inert template 范围的 title/canonical/meta/hreflang、base/lang、标题、main/article 文本、链接和 JSON-LD；模板原文仍保留于 body。JSON-LD 仅检查 JSON 语法，不是平台 rich-result 验证。声明式 Shadow DOM 和 JS 激活的模板仍需浏览器检查。
 
+title/textarea 内的标签样文本作为文本处理，不产生额外的标题、canonical 或 robots 指令。编码选择顺序为 UTF-8/UTF-16 BOM、HTTP charset、HTML 声明、UTF-8 回退；不是完整浏览器编码嗅探。原始 `declared_charset` 与实际 `decoding_encoding`、来源分别保留，便于核查冲突。字符集预扫描或正文解析失败时，仍保留正文和完整错误元数据，不生成误导性的 `page.json`。
+
 退出码 `0` 表示采集完成，包括成功保存 404/500；`2` 表示参数错误或采集存在网络、读取、编码、截断等问题。**退出成功不表示 SEO 通过。** 非 HTML 响应不强行做 HTML 缺失判断。
 
 边界：不执行 JS、不模拟浏览器 DOM、不判断隐藏/可见文本、不算 robots.txt 匹配规则、不检查索引、不递归抓站、不验证真实机器人身份；离线模式的 status 为空。HTMLParser 在畸形 HTML 的行为可能不同于浏览器。需要浏览器、GSC 检查或真实日志时，另行取得相应证据。
@@ -72,10 +74,10 @@ python3 scripts/summarize_observations.py observations.jsonl \
 - 两项品牌判断是人工或另行审核的输入，脚本不自动猜测。未评估为 null；`cited_urls: []` 表示确认没有引用，null 表示引用收集不完整。
 - 按 engine/surface/provider/model/locale/region/panel_id/search_enabled/session_condition 完整分组，不混合 UI 与 API。
 - 每项比率 = 相应成功回答中的肯定数 ÷ 该项已评估数；分母为零输出 null。不是所有请求成功率，也不是市场占有率。
-- 域名按精确域名及点分隔子域匹配，排除 `example.com.evil.test`；不跟随引用重定向，不证明引用支持相邻断言。拒绝含反斜杠或凭据的 URL；Unicode 主机采用保守、无损 IDNA 校验而非完整 UTS46 实现，ß、final sigma、joiners 等映射有歧义的主机需提供浏览器核验后的 ASCII/Punycode，不会强行并入另一域名。
+- 域名按精确域名及点分隔子域匹配，排除 `example.com.evil.test`；不跟随引用重定向，不证明引用支持相邻断言。拒绝含反斜杠或凭据的 URL，以及暂不支持的 IPvFuture IP-literal（如 `[v1.example]`）；常规 IPv6 地址仍支持。Unicode 主机采用保守、无损 IDNA 校验而非完整 UTS46 实现，ß、final sigma、joiners 等映射有歧义的主机需提供浏览器核验后的 ASCII/Punycode，不会强行并入另一域名。
 - `evidence_path` 只是出处引用，脚本不打开或核实它。保管原始回答并人工检查事实/断言支持；不能用脚本校验替代证据审核。
 - 同一个 prompt 重复次数多会更影响按运行统计的比率。输出包含各 prompt 运行次数与时间跨度；对比前检查样本组成，未知条件、版本变化和时间窗口。
-- 畸形行、重复 run_id、无时区日期、非法 citation URL 报具体行号。`--out` 拒绝覆盖已有文件。不提供跨平台 GEO 总分。
+- 畸形行、重复 run_id、无时区或 UTC 换算超出支持范围的日期、非法 citation URL 报具体行号。`--out` 拒绝覆盖已有文件。不提供跨平台 GEO 总分。
 
 品牌域名填自身真实控制的主机，不填公共后缀（如 com）或无关共享域名。网址引用到第三方关于你的文章与引用你的官网是不同指标，本脚本只自动统计后者。
 

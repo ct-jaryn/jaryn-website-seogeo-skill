@@ -9,6 +9,7 @@ import math
 import sys
 import time
 from datetime import datetime, timezone
+from html import unescape
 from html.parser import HTMLParser
 from http.client import IncompleteRead
 from pathlib import Path
@@ -59,6 +60,11 @@ def attributes_evidence(attrs):
 
 class PageParser(HTMLParser):
     """An indicative source parser. It neither renders nor proves visibility."""
+
+    # Reuse HTMLParser's matching-end-tag buffering for RCDATA, but decode
+    # character references ourselves; embedded markup must remain literal text.
+    RCDATA_ELEMENTS = {"title", "textarea"}
+    CDATA_CONTENT_ELEMENTS = HTMLParser.CDATA_CONTENT_ELEMENTS + ("title", "textarea")
 
     def __init__(self, base_url):
         super().__init__(convert_charrefs=True)
@@ -159,7 +165,17 @@ class PageParser(HTMLParser):
             return
         if self.script is not None:
             self.script["_text"].append(data)
+        if self.cdata_elem in self.RCDATA_ELEMENTS:
+            data = unescape(data)
         self.add_text(data)
+
+    def close(self):
+        super().close()
+        # HTMLParser otherwise drops buffered CDATA at EOF without an end tag.
+        if self.cdata_elem in self.RCDATA_ELEMENTS:
+            self.handle_data(self.rawdata)
+            self.rawdata = ""
+            self.clear_cdata_mode()
 
     def result(self):
         effective_base = (self.base or {}).get("resolved_url") or self.document_url
@@ -328,25 +344,31 @@ def parse_body(body, metadata, html_mode=False):
         return None
     encoding = metadata.get("declared_charset")
     encoding_source = "http_header" if encoding else None
-    if not encoding:
-        if body.startswith(codecs.BOM_UTF8):
-            encoding, encoding_source = "utf-8-sig", "bom"
-        elif body.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
-            encoding, encoding_source = "utf-16", "bom"
-        else:
-            # Parse, rather than regex-match, an ASCII-compatible source prefix for declarations.
-            declaration_parser = PageParser(metadata["final_url"])
+    # An HTML BOM takes precedence over transport metadata. Preserve the
+    # original declared_charset alongside the actual decoding source.
+    if body.startswith(codecs.BOM_UTF8):
+        encoding, encoding_source = "utf-8-sig", "bom"
+    elif body.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        encoding, encoding_source = "utf-16", "bom"
+    elif not encoding:
+        # Parse, rather than regex-match, an ASCII-compatible source prefix for declarations.
+        declaration_parser = PageParser(metadata["final_url"])
+        try:
             declaration_parser.feed(body[:4096].decode("latin-1"))
-            for meta in declaration_parser.meta:
-                encoding = meta["charset"]
-                if not encoding and (meta["http_equiv"] or "").lower() == "content-type":
-                    from email.message import Message
-                    message = Message()
-                    message["content-type"] = meta["content"] or ""
-                    encoding = message.get_content_charset()
-                if encoding:
-                    encoding_source = "html_declaration"
-                    break
+        except Exception as exc:
+            metadata["html_parse"] = "parser_error"
+            metadata["errors"].append({"phase": "charset_scan", "type": type(exc).__name__, "message": str(exc)})
+            return None
+        for meta in declaration_parser.meta:
+            encoding = meta["charset"]
+            if not encoding and (meta["http_equiv"] or "").lower() == "content-type":
+                from email.message import Message
+                message = Message()
+                message["content-type"] = meta["content"] or ""
+                encoding = message.get_content_charset()
+            if encoding:
+                encoding_source = "html_declaration"
+                break
     encoding = encoding or "utf-8"
     metadata["decoding_encoding"] = encoding
     metadata["decoding_encoding_source"] = encoding_source or "utf8_fallback_not_browser_sniffing"

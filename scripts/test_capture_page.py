@@ -2,6 +2,7 @@
 """Deterministic fixtures and local HTTP tests; no external network access."""
 
 import contextlib
+import codecs
 import gzip
 import hashlib
 import importlib.util
@@ -41,7 +42,10 @@ class FixtureHandler(BaseHTTPRequestHandler):
             return
         status = 404 if self.path == "/missing" else 200
         self.send_response(status)
-        self.send_header("Content-Type", "application/pdf" if self.path == "/pdf" else "text/html; charset=utf-8")
+        content_type = "application/pdf" if self.path == "/pdf" else "text/html; charset=utf-8"
+        if self.path == "/bad-declaration":
+            content_type = "text/html"
+        self.send_header("Content-Type", content_type)
         self.send_header("X-Source", "final")
         self.send_header("X-Robots-Tag", "noindex")
         self.send_header("X-Robots-Tag", "bingbot: noarchive")
@@ -60,6 +64,8 @@ class FixtureHandler(BaseHTTPRequestHandler):
             body = b"<title>invalid \xff</title>"
         elif self.path == "/shortbody":
             body = b"<p>partial</p>"
+        elif self.path == "/bad-declaration":
+            body = b"<![custom]><title>Actual</title>"
         self.send_header("Content-Length", "500" if self.path == "/shortbody" else str(len(body)))
         self.send_header("X-Received-Accept-Encoding", self.headers.get("Accept-Encoding", ""))
         self.end_headers()
@@ -262,6 +268,92 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(metadata["decoding_encoding_source"], "html_declaration")
         self.assertEqual(page["titles"][0]["text"], "Caf\u00e9")
+
+    def test_charset_scan_failure_preserves_complete_capture(self):
+        fixture = self.directory / "declaration.html"
+        body = b"<![custom]><title>Actual</title>"
+        fixture.write_bytes(body)
+        sources = [["--html-file", str(fixture), "--base-url", "https://example.test/"],
+                   ["--url", self.origin + "/bad-declaration"]]
+        for index, source in enumerate(sources):
+            with self.subTest(source=source):
+                code, metadata, page, output = self.run_capture(source, str(index))
+                self.assertEqual(code, 2)
+                self.assertEqual(metadata["html_parse"], "parser_error")
+                self.assertEqual(metadata["errors"][0]["phase"], "charset_scan")
+                self.assertTrue(metadata["operational_failure"])
+                self.assertIsNotNone(metadata["finished_at_utc"])
+                self.assertIsNone(page)
+                self.assertEqual((output / "response-body.bin").read_bytes(), body)
+
+
+class HTMLParsingTests(unittest.TestCase):
+    def parse(self, body, charset=None):
+        metadata = {"final_url": "https://example.test/", "content_type": "text/html",
+                    "declared_charset": charset, "errors": [], "truncated": False,
+                    "decoding_replacements": False}
+        page = CAPTURE.parse_body(body, metadata)
+        return page, metadata
+
+    def test_textarea_markup_cannot_create_page_metadata(self):
+        page, metadata = self.parse(b'''<title>Actual</title><main><h1>Published</h1>
+          <textarea><h1>Draft only</h1><base href="https://wrong.test/">
+          <link rel="canonical" href="/draft"><meta name="robots" content="noindex">
+          <meta charset="not-a-codec"><![custom]><template>literal</template></textarea>
+          <h2>After</h2></main><link rel="canonical" href="/actual">''')
+        self.assertEqual(metadata["html_parse"], "parsed")
+        self.assertEqual([item["text"] for item in page["headings"]], ["Published", "After"])
+        self.assertIsNone(page["first_base"])
+        self.assertEqual(page["meta"], [])
+        self.assertEqual(page["skipped_template_count"], 0)
+        self.assertEqual([item["resolved_url"] for item in page["canonicals"]], ["https://example.test/actual"])
+        self.assertIn("<h1>Draft only</h1>", page["main_article_regions"][0]["text"])
+
+    def test_title_preserves_literal_markup_and_decodes_entities_once(self):
+        page, metadata = self.parse(b'<title>How to use <img> &amp; &lt;b&gt; &amp;lt;i&amp;gt; tags</title><h1>Real</h1>')
+        self.assertEqual(metadata["errors"], [])
+        self.assertEqual(page["titles"][0]["text"], "How to use <img> & <b> &lt;i&gt; tags")
+        self.assertEqual(page["headings"][0]["text"], "Real")
+
+    def test_rcdata_handles_split_input_and_template_boundaries(self):
+        parser = CAPTURE.PageParser("https://example.test/")
+        for fragment in ['<template><title>literal </template> text</title></template>',
+                         '<title>A &am', 'p; <img></ti', 'tle><main><textarea>&lt;h1&gt;',
+                         'x&lt;/h1&gt;</TEXTAREA ><h1>After</h1></main>']:
+            parser.feed(fragment)
+        parser.close()
+        page = parser.result()
+        self.assertEqual([item["text"] for item in page["titles"]], ["A & <img>"])
+        self.assertEqual([item["text"] for item in page["headings"]], ["After"])
+        self.assertIn("<h1>x</h1>", page["main_article_regions"][0]["text"])
+        self.assertEqual(page["skipped_template_count"], 1)
+
+    def test_rcdata_text_is_preserved_at_end_of_file(self):
+        for source, key, expected in [(b"<title>Unclosed &amp; title", "titles", "Unclosed & title"),
+                                      (b"<main><textarea>Unclosed &lt;b&gt;", "main_article_regions", "Unclosed <b>")]:
+            with self.subTest(source=source):
+                page, _ = self.parse(source)
+                self.assertEqual(page[key][0]["text"], expected)
+
+    def test_bom_takes_precedence_over_http_charset(self):
+        content = "<title>中文</title>"
+        for bom, encoding in [(codecs.BOM_UTF8, "utf-8"),
+                              (codecs.BOM_UTF16_LE, "utf-16-le"),
+                              (codecs.BOM_UTF16_BE, "utf-16-be")]:
+            for declared in [None, "windows-1252", "not-a-codec"]:
+                with self.subTest(encoding=encoding, declared=declared):
+                    page, metadata = self.parse(bom + content.encode(encoding), declared)
+                    self.assertEqual(metadata["html_parse"], "parsed")
+                    self.assertEqual(metadata["decoding_encoding_source"], "bom")
+                    self.assertEqual(metadata["declared_charset"], declared)
+                    self.assertEqual(metadata["errors"], [])
+                    self.assertEqual(page["titles"][0]["text"], "中文")
+
+    def test_http_charset_precedes_meta_when_no_bom(self):
+        page, metadata = self.parse(b'<meta charset="utf-8"><title>Caf\xe9</title>', "windows-1252")
+        self.assertEqual(metadata["errors"], [])
+        self.assertEqual(metadata["decoding_encoding_source"], "http_header")
+        self.assertEqual(page["titles"][0]["text"], "Café")
 
 
 class HTTPFramingTests(unittest.TestCase):

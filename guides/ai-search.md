@@ -1,27 +1,31 @@
 # AI 搜索、实体与引用
 
-阅读条件：AI 搜索准备度、品牌可见性、错误引用、机器人访问、补充 Markdown 或 llms 文件。下文归纳平台公开规则，核验日期为 2026-09-17；实施时重新查询相关平台的官方文档与账号设置。
+阅读条件：AI 搜索准备度、品牌可见性、错误引用、机器人访问、补充 Markdown 或 llms 文件。下文归纳平台公开规则，核验日期为 2026-10-10；实施时重新查询相关平台的官方文档与账号设置。
 
 ## 产品、抓取和许可分别处理
 
 | 平台/用途 | 当前需要区分的控制 | 对实施的意义 |
 |---|---|---|
-| Google Search 的 AI Overviews / AI Mode | Googlebot、索引/摘要指令，以及 Search Console 的 Search generative AI 设置 | 技术资格之外核对属性及父属性的 Include/Exclude；无账号访问就标未知 |
-| Google-Extended | robots 用途控制 token，并非独立 HTTP UA；影响相关训练及 Gemini Apps/Vertex 的 grounding 用途 | 与 Google Search 控制分开；不是把 `User-Agent: Google-Extended` 请求成功就证明引用权限 |
+| Google Search 的 AI Overviews / AI Mode，以及 Google 探索中的生成式 AI 功能 | Googlebot、索引/摘要指令，以及 Search Console 的搜索生成式 AI 控制 | 技术资格之外核对当前属性及实际继承来源的 Include/Exclude。排除会同时影响这三类体验；无账号访问就标未知 |
+| Google-Extended | robots 用途控制 token，并非独立 HTTP UA。现行 Search Console 帮助明确它控制内容能否用于训练生成式 AI 搜索功能的应答模型；不影响 Google Search 收录，也不是排名信号 | 与搜索生成式 AI 的 Include/Exclude 分开。不是把 `User-Agent: Google-Extended` 请求成功就证明引用或训练许可。Gemini Apps/Vertex grounding 的当前句子以抓取工具文档为准，实施时打开核对 |
 | ChatGPT 搜索 | OAI-SearchBot | 与官方 IP/WAF 准入一起检查；开放不能保证引用 |
 | OpenAI 潜在训练 | GPTBot | 与搜索独立，保持站点所有者偏好 |
 | ChatGPT 用户请求 | ChatGPT-User | 用户触发访问，不决定搜索资格；robots 不一定适用 |
 | Claude 搜索/用户请求/训练 | Claude-SearchBot / Claude-User / ClaudeBot | 三者分开，不把 ClaudeBot 当搜索索引机器人 |
 | Perplexity 搜索/用户请求 | PerplexityBot / Perplexity-User | Bot 用于搜索而非基础模型训练；User 属用户请求，规则适用性不同 |
-| Bing / Copilot | Bingbot、索引指令及 Bing 对 noarchive/nocache 的 AI 使用说明 | 检查旧缓存指令是否有非预期 AI 使用后果；核对当前官方规则 |
+| Bing / Copilot | Bingbot、索引/摘要指令、正文 `data-nosnippet`，以及 noarchive/nocache | `data-nosnippet` 可把局部内容排除出 Bing 摘要和 Copilot 回答，页面仍可索引并参与排名。noarchive/nocache 可能限制整页进入 Copilot；以当前帮助页为准，不把旧缓存指令当无害遗留 |
 
-不要按未经核验的机器人长名单批量 Allow。新的中国/地区性引擎、产品或 UA 需查各自官方规则；没有资料就保留未知，不把 DeepSeek API 回答等同于某个联网产品的搜索结果。
+不要按未经核验的机器人长名单批量 Allow。百度、搜狗、360、微信搜一搜等区域产品，以及新的引擎、产品或 UA，只采用当时打开的该产品官方规则。没有资料就标未知，不用 Google/Bing 规则、英文 GEO 文章或模型记忆填空。不把 DeepSeek API 回答等同于某个联网产品的搜索结果。
 
 ## Google 的额外属性控制
 
-当前官方说明：Search Console → Settings → Search generative AI 可以 Include、Exclude 或继承父属性。根属性默认 Include，子属性可能继承上层选择。它影响搜索生成式体验中的链接和 grounding；不改变普通 Search 排名、不控制训练。
+当前官方说明：Search Console → 设置 → 搜索生成式 AI 可以包含、排除，或继承父资源。包含是所有资源的默认选项；资源有父级时，默认是继承。继承来自最近一个已停止继承的父资源；若所有父级都在继承，则来自顶级域名资源。子域和路径属性都可以是子资源。
 
-核对当前属性范围和继承来源，特别是子域和路径属性。不要仅因为某一属性显示继承就判断允许。变更属于发布方内容使用决策，沿用用户既有偏好与授权。页面满足条件仍不保证索引或被选为来源。
+该控制影响 AI 概览、AI 模式，以及 Google 探索中的生成式 AI 功能。排除后，指向本站的链接和本站内容不会出现在这些功能中，也不会作为这些功能生成回答或预览的输入；其他网站的相似内容仍可出现。它不是普通搜索的排名或收录信号，不覆盖 Merchant Center 与 Google Ads 的参与选择，也不阻止系统使用内容理解查询语言和网页文本语言。它不控制训练；训练用 Google-Extended。要完全不出现在 Google 搜索中，用 noindex。
+
+排除通常在控制生效后 1–2 天内反映到这些功能，缓存和系统同步可能更久。核对当前属性范围和实际继承来源，不要仅因显示“继承”就判断允许。变更属于发布方内容使用决策，沿用用户既有偏好与授权。页面满足条件仍不保证索引或被选为来源。
+
+首选来源徽章、搜索资料徽章和商家智能体是可选参与，不是 GEO 合格门槛。若要在 AI 概览或 AI 模式中作为首选来源显示，站点须已被纳入搜索生成式 AI 功能；只有域名和子域可以，子目录不行。不要为了合格去加这些按钮。
 
 ## 引用内容和实体一致性
 
@@ -33,7 +37,7 @@
 
 ## llms.txt、Markdown 和代理可用性
 
-Google 明确说明 llms.txt 不改变 Search 可见性。其他产品是否消费此文件，需要当前证据。把它当可选文档导航/集成资产，满足以下条件再做：已有明确读者或工具、维护成本合理、从同一事实来源生成、关键页面链接有效。
+Google 明确说明不要求 llms.txt，它不提高也不降低 Search 可见性或排名；留给其他系统可以。其他产品是否消费此文件，需要当前证据。把它当可选文档导航/集成资产，满足以下条件再做：已有明确读者或工具、维护成本合理、从同一事实来源生成、关键页面链接有效。
 
 对于技术文档，稳定 Markdown、复制代码、版本信息、示例和机器接口可能显著改善代理完成任务的能力；这不自动证明搜索排名提升。对普通营销站，先解决正文、技术交付和真实需求。
 
@@ -53,6 +57,6 @@ Google 明确说明 llms.txt 不改变 Search 可见性。其他产品是否消�
 
 ## 站外因素的处理边界
 
-网站迭代可提供值得引用的原始资料、公开纠错渠道、作者/组织事实和可分享工具。站外编辑采纳、真实口碑、市场需求、品牌历史、平台检索选择与算法波动无法从仓库直接修复。
+网站迭代可提供值得引用的原始资料、公开纠错渠道、作者/组织事实和可分享工具。站外编辑采纳、真实口碑、市场需求、品牌历史、平台检索选择与算法波动无法从仓库直接修复。外链导出怎么读，见[内容指南](content-architecture.md#外链与提及材料)。
 
 对这些依赖给具体证据与动作：如“引用方仍展示旧价格，已准备准确更正材料”。没有 Wikipedia/Wikidata 条目不是技术缺陷；只有符合社区规则与事实重要性才考虑。禁止把互链站群、虚构用户推荐、购买提及或伪装讨论作为默认增长手段。

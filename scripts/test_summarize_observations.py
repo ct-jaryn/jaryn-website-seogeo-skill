@@ -108,6 +108,23 @@ class MetricsTests(unittest.TestCase):
                 metrics.validate_row(observation(cited_urls=[url]), 9)
             self.assertEqual(caught.exception.line, 9)
 
+    def test_ipvfuture_literals_are_rejected_before_brand_matching(self):
+        for url in ("https://[v1.jaryn.example]/", "https://[vF.jaryn.example]:443/source"):
+            with self.subTest(url=url):
+                with self.assertRaisesRegex(metrics.ObservationError, "IPvFuture") as caught:
+                    metrics.validate_row(observation(cited_urls=[url]), 11)
+                self.assertEqual(caught.exception.line, 11)
+
+    def test_dns_hosts_and_ipv6_literals_remain_supported(self):
+        self.assertEqual(metrics.citation_host("https://v1.jaryn.example/"), "v1.jaryn.example")
+        self.assertEqual(metrics.citation_host("https://[2001:0DB8::1]:443/source"), "2001:db8::1")
+        result = report(
+            observation("dns", cited_urls=["https://v1.jaryn.example/"]),
+            observation("ipv6", cited_urls=["https://[2001:db8::1]/"]),
+        )["groups"][0]["metrics"]
+        self.assertEqual(result["brand_domain_cited_answer_count"], 1)
+        self.assertEqual(result["brand_domain_citation_rate"], 0.5)
+
     def test_lossy_unicode_host_mappings_fail_closed(self):
         ambiguous = [
             "faß.de", "FAẞ.de", "ος.example",  # sharp-s and Greek final sigma
@@ -166,6 +183,18 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(result["prompt_run_counts"], {"p1": 2, "p2": 1})
         self.assertEqual(result["prompt_valid_answer_counts"], {"p1": 2, "p2": 0})
         self.assertEqual(result["first_observed_at"], "2026-09-17T00:30:00+00:00")
+
+    def test_representable_utc_timestamp_boundaries_remain_supported(self):
+        timestamps = {
+            "0001-01-01T00:00:00Z": "0001-01-01T00:00:00+00:00",
+            "0001-01-01T01:00:00+01:00": "0001-01-01T00:00:00+00:00",
+            "9999-12-31T23:59:59Z": "9999-12-31T23:59:59+00:00",
+            "9999-12-31T22:59:59-01:00": "9999-12-31T23:59:59+00:00",
+        }
+        for timestamp, expected in timestamps.items():
+            with self.subTest(timestamp=timestamp):
+                valid = metrics.validate_row(observation(timestamp=timestamp), 1)
+                self.assertEqual(valid["_timestamp_utc"], expected)
 
     def test_success_requires_answer_or_provenance(self):
         with self.assertRaisesRegex(metrics.ObservationError, "success requires"):
@@ -238,6 +267,20 @@ class FileAndCliTests(unittest.TestCase):
                 self.assertEqual(metrics.main([str(source), "--brand-domain", "jaryn.example"]), 2)
             self.assertEqual(stdout.getvalue(), "")
             self.assertEqual(json.loads(stderr.getvalue())["line"], 2)
+
+    def test_cli_utc_timestamp_overflows_are_json_line_errors(self):
+        for timestamp in ("0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"):
+            with self.subTest(timestamp=timestamp), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "bad.jsonl"
+                source.write_text("\n" + json.dumps(observation(timestamp=timestamp)) + "\n", encoding="utf-8")
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    self.assertEqual(metrics.main([str(source), "--brand-domain", "jaryn.example"]), 2)
+                self.assertEqual(stdout.getvalue(), "")
+                error = json.loads(stderr.getvalue())
+                self.assertEqual(error["line"], 2)
+                self.assertIn("timestamp", error["error"])
+                self.assertIn("UTC", error["error"])
 
 
 if __name__ == "__main__":

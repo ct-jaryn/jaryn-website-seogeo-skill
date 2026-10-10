@@ -36,6 +36,7 @@ trip after lowercasing/NFC normalization. Mapping-sensitive Unicode labels (e.g.
 sharp-s, final sigma, joiners) are rejected: supply a browser-verified ASCII/
 Punycode hostname instead. Ordinary Chinese labels remain supported. This is not
 a complete IDNA2008/UTS46 or browser URL implementation; no hostname is resolved.
+IPvFuture IP-literals are not supported and are explicitly rejected.
 
 Rates are fractions in [0, 1], or null for an empty denominator. They describe
 unweighted runs within each exact comparable-condition group, not market share,
@@ -146,6 +147,9 @@ def citation_host(value):
     if parsed.username is not None or parsed.password is not None:
         raise ValueError("citation URLs with credentials are not supported")
     _ = parsed.port  # Reject malformed or out-of-range ports.
+    # urlsplit strips the brackets from IPvFuture literals as well as IPv6.
+    if "[" in parsed.netloc and parsed.hostname.lower().startswith("v"):
+        raise ValueError("citation URLs with IPvFuture IP-literals are not supported")
     return normalize_host(parsed.hostname)
 
 
@@ -162,7 +166,10 @@ def parse_timestamp(value):
         raise ValueError("timestamp must be ISO-8601 with time and timezone") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError("timestamp must include a timezone")
-    return parsed.astimezone(timezone.utc).isoformat()
+    try:
+        return parsed.astimezone(timezone.utc).isoformat()
+    except OverflowError as exc:
+        raise ValueError("timestamp is outside the supported UTC datetime range") from exc
 
 
 def validate_row(row, line):
